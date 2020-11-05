@@ -88,18 +88,19 @@ def authentication(addr, data):
 
 
 def main():
-    data, addr = s.recvfrom(BUFFER_SIZE)
+    while(True):
+        data, addr = s.recvfrom(BUFFER_SIZE)
 
-    data = data.decode()
+        data = data.decode()
 
-    data = data.split(',')
+        data = data.split(',')
 
-    if(data[0] == "Register"):
-        # Registration Module
-        registration(addr, data)
-    elif(data[0] == "Authenticate"):
-        # Authentication Module
-        authentication(addr, data)
+        if(data[0] == "Register"):
+            # Registration Module
+            registration(addr, data)
+        elif(data[0] == "Authenticate"):
+            # Authentication Module
+            authentication(addr, data)
 
 
 # Run KDC

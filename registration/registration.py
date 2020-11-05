@@ -9,10 +9,9 @@ class RegistrationService:
         self.nodeType = nodeType
         self.buffSize = buffSize
 
-    def register(self):
+    async def register(self):
         message = 'Register,' + self.nodeType
-        self.s.sendto(message.encode(), (self.kdcIP, self.kdcPort))
-        data, addr = self.s.recvfrom(self.buffSize)
-        print(data.decode())
-        print(addr)
+        await self.s.sendto(message.encode(), (self.kdcIP, self.kdcPort))
+        data, addr = await self.s.recvfrom(self.buffSize)
         print("Registration Successful")
+        return {data, addr}

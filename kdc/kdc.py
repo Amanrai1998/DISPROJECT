@@ -1,4 +1,5 @@
 import socket
+import asyncio
 import secrets
 from cryptography.fernet import Fernet
 
@@ -17,8 +18,14 @@ class User:
 class DB:  # DATABASE
     Users = []
 
-    def _init_(self):
+    def __init__(self):
         print("DB Connected")
+
+    def findUser(self, ID):
+        for user in self.Users:
+            if(user.ID==ID):
+                return user
+        return None
 
     def findUserByAddr(self, addr):
         for user in self.Users:
@@ -30,12 +37,17 @@ class DB:  # DATABASE
         # generate a Unique Symmentric Key And ID
         ID = secrets.token_hex(14)  # Check Uniqueness
         SK = Fernet.generate_key()
-        print(SK.decode())
         # add db entry ID, IP, PORT, Nodetype, symmetric key, FILES, Session Key with expiry(empty)
         user = User(ID, addr, nType, SK, [])
         self.Users.append(user)
 
         return user
+
+    def registerFile(self, ID, file):
+        for user in self.Users:
+            if(user.ID == ID):  # check addr structure
+                return user.Files.append(file)
+        return None
 
 
 UDP_IP = '127.0.0.1'
@@ -50,13 +62,13 @@ db = DB()
 # Request Functions
 
 
-def registration(addr, data):
+async def registration(addr, data):
     # check in db if server with ip exist
     user = db.findUserByAddr(addr)
 
     if(user != None):
         message = "Already Registered"
-        s.sendto(message, addr)
+        s.sendto(message.encode(), addr)
         return
 
     # register user
@@ -67,7 +79,7 @@ def registration(addr, data):
     s.sendto(message.encode(), addr)
 
 
-def authentication(addr, data):
+async def authentication(addr, data):
     # find user in db
     sourceUser = db.findUser(data[2])
     destinationUser = db.findUser(data[3])
@@ -84,23 +96,32 @@ def authentication(addr, data):
     message = "Authenticated,"+sourceEncryption
     s.sendto(message.encode, addr)
 
+async def fileRegisteration(addr, data):
+    #find user in db
+    user = db.findUser(data[1])
+
+    #update files array in db
+    user = db.registerFile(data[2])
+
+    #send new file info to every node
+
 # main
 
+async def main():
+    while(1):
+        data, addr = s.recvfrom(BUFFER_SIZE)
 
-def main():
-    data, addr = s.recvfrom(BUFFER_SIZE)
+        data = data.decode()
 
-    data = data.decode()
+        data = data.split(',')
 
-    data = data.split(',')
-
-    if(data[0] == "Register"):
-        # Registration Module
-        registration(addr, data)
-    elif(data[0] == "Authenticate"):
-        # Authentication Module
-        authentication(addr, data)
-
+        if(data[0] == "Register"):
+            # Registration Module
+            await registration(addr, data)
+        elif(data[0] == "Authenticate"):
+            # Authentication Module
+            await authentication(addr, data)
 
 # Run KDC
-main()
+if __name__ == '__main__':
+    asyncio.run(main())

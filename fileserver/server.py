@@ -14,13 +14,12 @@ KDC_IP = '127.0.0.1'
 
 
 def main():
+    print('Server Started')
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind((UDP_IP, UDP_PORT))
-    print(socket.gethostbyname(KDC_URL))
     registrationService = RegistrationService(
-        server_socket, KDC_IP, KDC_SERVER_PORT, 'F')
+        server_socket, KDC_IP, KDC_SERVER_PORT, 'F', BUFFER_SIZE)
     registrationService.register()
-    print('hello world')
 
 
 if __name__ == "__main__":

@@ -94,7 +94,14 @@ async def authentication(addr, data):
     sourceEncryption = f.encrypt(
         data[1]+","+data[3]+","+sessionKey+","+destinationEncrption)
     message = "Authenticated,"+sourceEncryption
-    s.sendto(message.encode, addr)
+    s.sendto(message.encode(), addr)
+
+async def lookup(addr, data):
+    #find user by addr in db
+    user = db.findUserByAddr((data[1], int(data[2])))
+
+    message = "Lookup,"+user.ID
+    s.sendto(message.encode(), addr)
 
 async def fileRegisteration(addr, data):
     #find user in db
@@ -103,6 +110,8 @@ async def fileRegisteration(addr, data):
     #update files array in db
     user = db.registerFile(data[2])
 
+    message = "File Registered"
+    s.sendto(message.encode(), addr)
     #send new file info to every node
 
 # main
@@ -121,6 +130,12 @@ async def main():
         elif(data[0] == "Authenticate"):
             # Authentication Module
             await authentication(addr, data)
+        elif(data[0] == "Lookup"):
+            #Look up
+            await lookup(addr, data)
+        elif(data[0] == "File Registration"):
+            await fileRegisteration(addr, data)
+
 
 # Run KDC
 if __name__ == '__main__':

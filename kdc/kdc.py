@@ -126,7 +126,9 @@ async def main():
 
         if(data[0] == "Register"):
             # Registration Module
-            await registration(addr, data)
+            task = asyncio.create_task(registration(addr, data))
+            # await registration(addr, data)
+            task
         elif(data[0] == "Authenticate"):
             # Authentication Module
             await authentication(addr, data)

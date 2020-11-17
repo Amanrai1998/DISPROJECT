@@ -8,6 +8,7 @@ import random
 from cryptography.fernet import Fernet
 
 from registration.registration import RegistrationService
+from rpc.rpc_service import RPCService
 
 # Global Constants
 UDP_IP = '127.0.0.1'
@@ -21,8 +22,9 @@ ID = ''
 SK = ''
 sessionKey = {}
 
+
 def authenticate(s, addr, data):
-    #decode recived data destNonce, (SourceId, sessionKey)
+    # decode recived data destNonce, (SourceId, sessionKey)
     f = Fernet(SK)
     decodedData = f.decrypt(data[2].encode())
     decodedData = decodedData.decode()
@@ -33,21 +35,21 @@ def authenticate(s, addr, data):
     f = Fernet(sessionKey[sourceId])
     recNonce = int(f.decrypt(data[1].encode()))
 
-    #send to node updated nonce and server nonce
+    # send to node updated nonce and server nonce
     nonce1 = random.randint(0, 100)
     encryptedData = f.encrypt((str(recNonce-1)+","+str(nonce1)).encode())
     message = "Authenticate,"+encryptedData.decode()
     s.sendto(message.encode(), addr)
 
-    #recieve from node
+    # recieve from node
     data, addr = s.recvfrom(BUFFER_SIZE)
     data = data.decode()
     data = data.split(',')
     if(data[0] != "Authenticated"):
         print("Authentication Error")
         return
-    
-    #decode sent note to verify
+
+    # decode sent note to verify
     decodedData = f.decrypt(data[1].encode())
     decodedData = decodedData.decode()
     decodedData = decodedData.split(',')
@@ -55,11 +57,22 @@ def authenticate(s, addr, data):
         print("Nonce Match Error")
         return
 
-    #send to node success
+    # send to node success
     message = "Authenticated"
     s.sendto(message.encode(), addr)
 
     print("Authenticated")
+
+
+def lookup(s, PORT):
+    message = 'Lookup,127.0.0.1,'+PORT
+    s.sendto(message.encode(), (KDC_IP, KDC_SERVER_PORT))
+    data, addr = s.recvfrom(BUFFER_SIZE)
+    data = data.decode()
+    data = data.split(',')
+    if(data[0] == "Lookup"):
+        return data[1]
+    return None
 
 
 async def main():
@@ -78,7 +91,10 @@ async def main():
     # Register server with KDC
     data, addr = await registrationService.register()
 
-    if(data[0]=='Registered'):
+    # intantitate RPCService
+    rpcService = RPCService()
+
+    if(data[0] == 'Registered'):
         global ID
         global SK
         ID = data[1]
@@ -91,11 +107,14 @@ async def main():
 
         data = data.split(',')
 
-        if(data[0]=='Authenticate'):
+        if(data[0] == 'Authenticate'):
             authenticate(server_socket, addr, data)
-
-        # time.sleep(10)
-        # print('listning...')
+        else:
+            client_Id = lookup(server_socket, str(addr[1]))
+            f = Fernet(sessionKey[client_Id])
+            command = f.decrypt(data[0].encode()).decode()
+            returned_output = await rpcService.execCommand(command)
+            server_socket.sendto(returned_output, addr)
 
 
 if __name__ == "__main__":

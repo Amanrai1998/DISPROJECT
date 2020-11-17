@@ -22,6 +22,7 @@ ID = ''
 SK = ''
 sessionKey = ''
 
+
 async def authenticate(s, PORT):
     destId = lookup(s, PORT)
     if(destId == None):
@@ -30,12 +31,12 @@ async def authenticate(s, PORT):
 
     PORT = int(PORT)
 
-    #send to KDC
+    # send to KDC
     nonce1 = random.randint(0, 100)
     message = "Authenticate,"+str(nonce1)+","+ID+","+destId
     s.sendto(message.encode(), (KDC_IP, KDC_SERVER_PORT))
 
-    #Recieve from KDC
+    # Recieve from KDC
     data, addr = s.recvfrom(BUFFER_SIZE)
     data = data.decode()
     data = data.split(',')
@@ -43,7 +44,7 @@ async def authenticate(s, PORT):
         print("Authentication Error")
         return
 
-    #nonce matching
+    # nonce matching
     f = Fernet(SK)
     decodedData = f.decrypt(data[1].encode())
     decodedData = decodedData.decode()
@@ -52,7 +53,7 @@ async def authenticate(s, PORT):
         print("Nonce Match Error")
         return
 
-    #Send to File server
+    # Send to File server
     nonce2 = random.randint(0, 100)
     sessKey = decodedData[2].encode()
     f = Fernet(sessKey)
@@ -60,7 +61,7 @@ async def authenticate(s, PORT):
     message = "Authenticate,"+encryptedNonce2.decode()+","+decodedData[3]
     s.sendto(message.encode(), ('127.0.0.1', PORT))
 
-    #Recieve from file server
+    # Recieve from file server
     data, addr = s.recvfrom(BUFFER_SIZE)
     data = data.decode()
     data = data.split(',')
@@ -68,7 +69,7 @@ async def authenticate(s, PORT):
         print("Authentication Error")
         return
 
-    #nonce matching    
+    # nonce matching
     decodedData = f.decrypt(data[1].encode())
     decodedData = decodedData.decode()
     decodedData = decodedData.split(',')
@@ -76,23 +77,21 @@ async def authenticate(s, PORT):
         print("Nonce Match Error")
         return
 
-    #Send to file server for verification
+    # Send to file server for verification
     encryptedDestNonce = f.encrypt(str(int(decodedData[1])-1).encode())
     message = "Authenticated,"+encryptedDestNonce.decode()
     s.sendto(message.encode(), ('127.0.0.1', PORT))
 
-    #Recieve from file server authenticated
+    # Recieve from file server authenticated
     data, addr = s.recvfrom(BUFFER_SIZE)
     data = data.decode()
     data = data.split(',')
     if(data[0] != "Authenticated"):
         print("Authentication Error")
         return
-    
+
     global sessionKey
     sessionKey = sessKey
-    print("Authenticated")
-
 
 
 def lookup(s, PORT):
@@ -105,8 +104,15 @@ def lookup(s, PORT):
         return data[1]
     return None
 
+
+async def callRPC(s, msg, port):
+    s.sendto(msg, (UDP_IP, int(port)))
+    data, addr = s.recvfrom(BUFFER_SIZE)
+    return data.decode()
+
+
 async def main():
-    print('Server Started')
+    print('Client Started')
 
     # Start socket
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -121,7 +127,7 @@ async def main():
     # Register server with KDC
     data, addr = await registrationService.register()
 
-    if(data[0]=='Registered'):
+    if(data[0] == 'Registered'):
         global ID
         global SK
         ID = data[1]
@@ -129,11 +135,24 @@ async def main():
 
     while(True):
         inp = input()
-        inp = inp.split(' ')
-        if(inp[0] == "Authenticate"):
-            await authenticate(server_socket, inp[1])
-        # time.sleep(10)
-        # print('Waiting...')
+        inp = inp.split(',')
+
+        await authenticate(server_socket, inp[len(inp) - 1])
+        msg: str = inp[0]
+        f = Fernet(sessionKey)
+        output = await callRPC(server_socket, f.encrypt(msg.encode()), inp[len(inp) - 1])
+        print(output)
+
+        # if(inp[0] == "Authenticate"):
+        #     await authenticate(server_socket, inp[1])
+        # if(inp[0] == "RPC"):
+        #     if(sessionKey is None or sessionKey == ''):
+        #         print('Not Authenticated')
+        #     else:
+        #         msg: str = inp[0] + ',' + inp[1]
+        #         f = Fernet(sessionKey)
+        #         output = await callRPC(server_socket, f.encrypt(msg.encode()), inp[2])
+        #         print(output)
 
 
 if __name__ == "__main__":

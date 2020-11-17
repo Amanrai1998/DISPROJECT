@@ -22,54 +22,68 @@ ID = ''
 SK = ''
 sessionKey = ''
 
-def authenticate(s, PORT):
+async def authenticate(s, PORT):
     destId = lookup(s, PORT)
     if(destId == None):
         print("Authentication Error")
         return
 
+    PORT = int(PORT)
+
+    #send to KDC
     nonce1 = random.randint(0, 100)
-    message = "Authenticate,"+nonce1+","+ID+","+destId
+    message = "Authenticate,"+str(nonce1)+","+ID+","+destId
     s.sendto(message.encode(), (KDC_IP, KDC_SERVER_PORT))
 
+    #Recieve from KDC
     data, addr = s.recvfrom(BUFFER_SIZE)
+    data = data.decode()
     data = data.split(',')
     if(data[0] != "Authenticated"):
         print("Authentication Error")
         return
-    
+
+    #nonce matching
     f = Fernet(SK)
-    decodedData = f.decrypt(data[1])
+    decodedData = f.decrypt(data[1].encode())
+    decodedData = decodedData.decode()
     decodedData = decodedData.split(',')
     if(nonce1 != int(decodedData[0])):
         print("Nonce Match Error")
         return
 
+    #Send to File server
     nonce2 = random.randint(0, 100)
     sessKey = decodedData[2].encode()
-    f = Fernet(decodedData[2].encode())
-    encryptedNonce2 = f.encrypt(""+nonce2)
-    message = "Authenticate,"+encryptedNonce2+","+decodedData[3]
+    f = Fernet(sessKey)
+    encryptedNonce2 = f.encrypt(str(nonce2).encode())
+    message = "Authenticate,"+encryptedNonce2.decode()+","+decodedData[3]
     s.sendto(message.encode(), ('127.0.0.1', PORT))
 
+    #Recieve from file server
     data, addr = s.recvfrom(BUFFER_SIZE)
-
+    data = data.decode()
     data = data.split(',')
     if(data[0] != "Authenticate"):
         print("Authentication Error")
         return
-    
-    decodedData = f.decrypt(data[1])
+
+    #nonce matching    
+    decodedData = f.decrypt(data[1].encode())
+    decodedData = decodedData.decode()
     decodedData = decodedData.split(',')
     if(nonce2-1 != int(decodedData[0])):
         print("Nonce Match Error")
         return
 
-    encryptedDestNonce = f.encrypt(int(decodedData[1])-1)
-    message = "Authenticated,"+encryptedDestNonce
+    #Send to file server for verification
+    encryptedDestNonce = f.encrypt(str(int(decodedData[1])-1).encode())
+    message = "Authenticated,"+encryptedDestNonce.decode()
     s.sendto(message.encode(), ('127.0.0.1', PORT))
 
+    #Recieve from file server authenticated
     data, addr = s.recvfrom(BUFFER_SIZE)
+    data = data.decode()
     data = data.split(',')
     if(data[0] != "Authenticated"):
         print("Authentication Error")
@@ -82,10 +96,11 @@ def authenticate(s, PORT):
 
 
 def lookup(s, PORT):
-    message = '127.0.0.1,'+PORT
+    message = 'Lookup,127.0.0.1,'+PORT
     s.sendto(message.encode(), (KDC_IP, KDC_SERVER_PORT))
     data, addr = s.recvfrom(BUFFER_SIZE)
-    data.split(',')
+    data = data.decode()
+    data = data.split(',')
     if(data[0] == "Lookup"):
         return data[1]
     return None
@@ -104,15 +119,19 @@ async def main():
         server_socket, KDC_IP, KDC_SERVER_PORT, 'D', BUFFER_SIZE)
 
     # Register server with KDC
-    registrationService.register()
+    data, addr = await registrationService.register()
+
+    if(data[0]=='Registered'):
+        global ID
+        global SK
+        ID = data[1]
+        SK = data[2].encode()
 
     while(True):
         inp = input()
-
         inp = inp.split(' ')
-
-        if(inp[0] == "Autenticate"):
-            authenticate(server_socket, inp[1])
+        if(inp[0] == "Authenticate"):
+            await authenticate(server_socket, inp[1])
         # time.sleep(10)
         # print('Waiting...')
 

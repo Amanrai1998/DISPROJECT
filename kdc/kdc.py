@@ -77,6 +77,7 @@ async def registration(addr, data):
     # Send Registration Confirmation
     message = "Registered,"+user.ID+","+user.SK.decode()
     s.sendto(message.encode(), addr)
+    print("Registered")
 
 
 async def authentication(addr, data):
@@ -88,12 +89,13 @@ async def authentication(addr, data):
     sessionKey = Fernet.generate_key()
     # encryption for destination
     f = Fernet(destinationUser.SK)
-    destinationEncrption = f.encrypt(data[2]+","+sessionKey)
+    destinationEncrption = f.encrypt((str(data[2])+","+sessionKey.decode()).encode())
     # encryption for source
     f = Fernet(sourceUser.SK)
     sourceEncryption = f.encrypt(
-        data[1]+","+data[3]+","+sessionKey+","+destinationEncrption)
-    message = "Authenticated,"+sourceEncryption
+        (data[1]+","+data[3]+","+sessionKey.decode()+","+destinationEncrption.decode()).encode()
+    )
+    message = "Authenticated,"+sourceEncryption.decode()
     s.sendto(message.encode(), addr)
 
 async def lookup(addr, data):
@@ -126,9 +128,9 @@ async def main():
 
         if(data[0] == "Register"):
             # Registration Module
-            task = asyncio.create_task(registration(addr, data))
-            # await registration(addr, data)
-            task
+            # task = asyncio.create_task(registration(addr, data))
+            await registration(addr, data)
+            # task
         elif(data[0] == "Authenticate"):
             # Authentication Module
             await authentication(addr, data)

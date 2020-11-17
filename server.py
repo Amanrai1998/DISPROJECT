@@ -19,63 +19,46 @@ KDC_IP = '127.0.0.1'
 # Will be generated after registation
 ID = ''
 SK = ''
-sessionKey = ''
+sessionKey = {}
 
-def authenticate(s, PORT):
-    destId = lookup(s, PORT)
-    if(destId == None):
-        print("Authentication Error")
-        return
-
-    nonce1 = random.randint(0, 100)
-    message = "Authenticate,"+nonce1+","+ID+","+destId
-    s.sendto(message.encode(), (KDC_IP, KDC_SERVER_PORT))
-
-    data, addr = s.recvfrom(BUFFER_SIZE)
-    data = data.split(',')
-    if(data[0] != "Authenticated"):
-        print("Authentication Error")
-        return
-    
+def authenticate(s, addr, data):
+    #decode recived data destNonce, (SourceId, sessionKey)
     f = Fernet(SK)
-    decodedData = f.decrypt(data[1])
+    decodedData = f.decrypt(data[2].encode())
+    decodedData = decodedData.decode()
     decodedData = decodedData.split(',')
-    if(nonce1 != int(decodedData[0])):
-        print("Nonce Match Error")
-        return
+    sourceId = decodedData[0]
+    sessionKey[sourceId] = decodedData[1].encode()
 
-    nonce2 = random.randint(0, 100)
-    sessKey = decodedData[2].encode()
-    f = Fernet(decodedData[2].encode())
-    encryptedNonce2 = f.encrypt(""+nonce2)
-    message = "Authenticate,"+encryptedNonce2+","+decodedData[3]
-    s.sendto(message.encode(), ('127.0.0.1', PORT))
+    f = Fernet(sessionKey[sourceId])
+    recNonce = int(f.decrypt(data[1].encode()))
 
+    #send to node updated nonce and server nonce
+    nonce1 = random.randint(0, 100)
+    encryptedData = f.encrypt((str(recNonce-1)+","+str(nonce1)).encode())
+    message = "Authenticate,"+encryptedData.decode()
+    s.sendto(message.encode(), addr)
+
+    #recieve from node
     data, addr = s.recvfrom(BUFFER_SIZE)
-
-    data = data.split(',')
-    if(data[0] != "Authenticate"):
-        print("Authentication Error")
-        return
-    
-    decodedData = f.decrypt(data[1])
-    decodedData = decodedData.split(',')
-    if(nonce2-1 != int(decodedData[0])):
-        print("Nonce Match Error")
-        return
-
-    encryptedDestNonce = f.encrypt(int(decodedData[1])-1)
-    message = "Authenticated,"+encryptedDestNonce
-    s.sendto(message.encode(), ('127.0.0.1', PORT))
-
-    data, addr = s.recvfrom(BUFFER_SIZE)
+    data = data.decode()
     data = data.split(',')
     if(data[0] != "Authenticated"):
         print("Authentication Error")
         return
     
-    global sessionKey
-    sessionKey = sessKey
+    #decode sent note to verify
+    decodedData = f.decrypt(data[1].encode())
+    decodedData = decodedData.decode()
+    decodedData = decodedData.split(',')
+    if(nonce1-1 != int(decodedData[0])):
+        print("Nonce Match Error")
+        return
+
+    #send to node success
+    message = "Authenticated"
+    s.sendto(message.encode(), addr)
+
     print("Authenticated")
 
 
@@ -93,11 +76,26 @@ async def main():
         server_socket, KDC_IP, KDC_SERVER_PORT, 'F', BUFFER_SIZE)
 
     # Register server with KDC
-    credentials = await registrationService.register()
+    data, addr = await registrationService.register()
+
+    if(data[0]=='Registered'):
+        global ID
+        global SK
+        ID = data[1]
+        SK = data[2].encode()
 
     while(True):
-        time.sleep(10)
-        print('listning...')
+        data, addr = server_socket.recvfrom(BUFFER_SIZE)
+
+        data = data.decode()
+
+        data = data.split(',')
+
+        if(data[0]=='Authenticate'):
+            authenticate(server_socket, addr, data)
+
+        # time.sleep(10)
+        # print('listning...')
 
 
 if __name__ == "__main__":
